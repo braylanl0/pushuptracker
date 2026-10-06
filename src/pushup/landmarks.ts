@@ -14,6 +14,7 @@ export interface PoseLandmark {
 
 /** MediaPipe BlazePose (33-point) landmark indices we care about. */
 export const LM = {
+  nose: 0,
   leftShoulder: 11,
   rightShoulder: 12,
   leftElbow: 13,

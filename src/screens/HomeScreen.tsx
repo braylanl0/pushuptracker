@@ -23,7 +23,7 @@ export function HomeScreen({ best, last, onStart, onHistory }: Props) {
       <div className="home-hero">
         <PlankFigure />
         <h1>Camera push-up counter</h1>
-        <p>Prop up your phone so your full body is visible from the side.</p>
+        <p>Prop up your phone so your body is in view, side-on or facing the camera.</p>
       </div>
 
       {(best || last) && (

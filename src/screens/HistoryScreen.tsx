@@ -1,14 +1,16 @@
 import { dayKey, dayLabel, formatDuration, timeOfDay } from '../lib/format';
 import type { WorkoutRecord } from '../lib/storage';
+import { ActivityStrip } from './ActivityStrip';
 
 interface Props {
   history: WorkoutRecord[];
   best: WorkoutRecord | null;
   onBack: () => void;
   onClear: () => void;
+  onOpenActivity: () => void;
 }
 
-export function HistoryScreen({ history, best, onBack, onClear }: Props) {
+export function HistoryScreen({ history, best, onBack, onClear, onOpenActivity }: Props) {
   // Group consecutive records (already newest-first) by calendar day.
   const groups: Array<{ key: string; label: string; total: number; items: WorkoutRecord[] }> = [];
   for (const r of history) {
@@ -42,6 +44,8 @@ export function HistoryScreen({ history, best, onBack, onClear }: Props) {
           </span>
         </div>
       )}
+
+      {history.length > 0 && <ActivityStrip history={history} onOpen={onOpenActivity} />}
 
       {groups.length === 0 ? (
         <p className="empty">No workouts yet. Your sets will show up here.</p>

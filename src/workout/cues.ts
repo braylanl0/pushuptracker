@@ -13,7 +13,7 @@ const FULL_BODY = 'Make sure your shoulders, hips and ankles are visible.';
 export const CUE_COPY: Record<Cue, CueCopy> = {
   STEP_BACK: { title: 'Step back', detail: FULL_BODY, tone: 'neutral' },
   SHOW_FULL_BODY: { title: 'Show your full body', detail: FULL_BODY, tone: 'neutral' },
-  GET_INTO_POSITION: { title: 'Get into position', detail: 'Side-on to the camera, in a high plank.', tone: 'neutral' },
+  GET_INTO_POSITION: { title: 'Get into position', detail: 'High plank, side-on or facing the camera.', tone: 'neutral' },
   STRAIGHTEN_ARMS: { title: 'Arms straight', detail: 'Start from the top of a push-up.', tone: 'neutral' },
   HOLD: { title: 'Hold', detail: 'Hold still at the top.', tone: 'accent' },
   READY: { title: 'Ready', tone: 'accent' },

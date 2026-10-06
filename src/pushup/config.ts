@@ -70,6 +70,8 @@ export interface PushupConfig {
   // ── Positioning (before the set starts) ────────────────────────────────
   /** Good tracking + plank + arms extended must hold this long before the set starts. */
   readyHoldMs: number;
+  /** Tracking dropouts shorter than this don't restart the hold (one bad frame shouldn't). */
+  readyDropoutToleranceMs: number;
 
   // ── Lost tracking ──────────────────────────────────────────────────────
   /** Brief dropouts shorter than this keep the current rep alive. Longer ones cancel the rep in progress (no count) and require returning to the top. */
@@ -84,6 +86,56 @@ export interface PushupConfig {
   // ── Coaching ───────────────────────────────────────────────────────────
   /** How long "REP COMPLETE" stays on screen. */
   repCompleteCueMs: number;
+  /** Smoothed depth at which a rep counts as "full depth" (fires the full-depth sound once per rep). */
+  fullDepthThreshold: number;
+
+  // ── View detection (side-on vs facing the camera) ──────────────────────
+  /**
+   * The view is decided from (shoulder-to-shoulder distance) / (arm length)
+   * in the image. Side-on, the two shoulders overlap (ratio ≈ 0–0.3); facing
+   * the camera they're a full shoulder-width apart (ratio ≈ 0.5–0.65). Switch to
+   * front above `frontViewEnter`, back to side below `sideViewEnter`; the gap
+   * between them stops flip-flopping at a diagonal angle.
+   */
+  frontViewEnter: number;
+  sideViewEnter: number;
+  /** EMA factor for the view ratio (0..1, higher = reacts faster). */
+  viewSmoothing: number;
+
+  // ── Front-facing depth ─────────────────────────────────────────────────
+  /**
+   * Facing the camera, the 2D elbow angle is unreliable (a bent, tucked arm
+   * points at the camera and still looks straight), so depth comes from how
+   * far the shoulders drop toward the wrists, measured in shoulder-widths
+   * (stays constant as you move nearer/further) and compared with the top
+   * position. 0.55 = shoulders drop 55% of their top height ≈ a 90° elbow.
+   */
+  frontDropForFullDepth: number;
+  /** While positioning facing the camera, visible elbows must be at least this straight to start. */
+  frontReadyElbowAngle: number;
+  /**
+   * "Standing, not in a plank" checks (facing the camera). Only joints at
+   * least this confident count as evidence: when you're in a plank your hips
+   * and legs are hidden behind you, and the pose model guesses where they
+   * are (low confidence), often wrongly placing them below the shoulders.
+   */
+  frontStandingEvidenceVisibility: number;
+  /** Standing if confidently-seen hips are more than this many shoulder-widths below the shoulders. */
+  frontMaxHipDrop: number;
+  /** Standing if confidently-seen knees/ankles are more than this many shoulder-widths below the shoulders. */
+  frontMaxLegDrop: number;
+
+  /**
+   * Facing the camera, the "top" is re-learned from where you actually stop:
+   * if the shoulders stay still (slower than `frontSettleSpeed` top-heights
+   * per second for `frontSettleMs`) within `frontSettleMaxDepth`% of the top,
+   * that's your top, and a rep coming up to it completes. Likewise, turning
+   * back down within `frontSettleMaxDepth`% of the top completes the rep.
+   * This keeps counting reliable when your top position drifts during a set.
+   */
+  frontSettleSpeed: number;
+  frontSettleMs: number;
+  frontSettleMaxDepth: number;
 }
 
 export const DEFAULT_PUSHUP_CONFIG: PushupConfig = {
@@ -111,6 +163,7 @@ export const DEFAULT_PUSHUP_CONFIG: PushupConfig = {
   maxTorsoTiltDeg: 50,
 
   readyHoldMs: 800,
+  readyDropoutToleranceMs: 250,
 
   lostGraceMs: 700,
 
@@ -118,4 +171,19 @@ export const DEFAULT_PUSHUP_CONFIG: PushupConfig = {
   alignmentHintDelayMs: 600,
 
   repCompleteCueMs: 700,
+  fullDepthThreshold: 97,
+
+  frontViewEnter: 0.45,
+  sideViewEnter: 0.3,
+  viewSmoothing: 0.15,
+
+  frontDropForFullDepth: 0.55,
+  frontReadyElbowAngle: 150,
+  frontStandingEvidenceVisibility: 0.8,
+  frontMaxHipDrop: 1.2,
+  frontMaxLegDrop: 2.0,
+
+  frontSettleSpeed: 0.15,
+  frontSettleMs: 250,
+  frontSettleMaxDepth: 40,
 };

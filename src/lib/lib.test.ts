@@ -61,8 +61,10 @@ describe('storage', () => {
 
   it('persists preferences', () => {
     const s = memoryStore();
+    expect(loadPrefs(s).sound).toBe(true);
     savePrefs({ facingMode: 'environment' }, s);
-    expect(loadPrefs(s).facingMode).toBe('environment');
+    savePrefs({ sound: false }, s);
+    expect(loadPrefs(s)).toEqual({ facingMode: 'environment', sound: false });
   });
 
   it('summarizes rep depths', () => {

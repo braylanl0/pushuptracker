@@ -87,6 +87,87 @@ export function syntheticPose(opts: SyntheticPoseOptions): PoseLandmark[] {
   return out;
 }
 
+export interface SyntheticFrontPoseOptions {
+  /** Shoulder height above the wrists, as a fraction of arm length (1 = top, arms vertical). */
+  shoulderHeight: number;
+  width?: number;
+  height?: number;
+  /** Visibility of the hips (often partly hidden behind the shoulders head-on). */
+  hipVisibility?: number;
+  /** Hide one wrist (and elbow) entirely. */
+  hideArm?: Side;
+  /** Standing upright facing the camera, arms hanging. */
+  standing?: boolean;
+  /** Shoulder width as a fraction of arm length (default 0.67; real joint-to-joint is often ~0.5–0.6). */
+  spanRatio?: number;
+  /** How far the nose sits above the shoulder line, in shoulder-widths (default 0.15; looking up at the phone ≈ 0.7+). */
+  noseRise?: number;
+  /** Where the (occluded) hips are drawn relative to the shoulders, in shoulder-widths below (default -0.05). */
+  hipDrop?: number;
+  noisePx?: number;
+  rng?: () => number;
+}
+
+/**
+ * Synthetic push-up facing the camera (camera on the floor in front of you).
+ * Shoulders are a shoulder-width apart, hands slightly wider; as you lower,
+ * the shoulders drop toward the wrists and the elbows flare outward
+ * (two-link arm, solved so both segments keep their length).
+ */
+export function syntheticFrontPose(opts: SyntheticFrontPoseOptions): PoseLandmark[] {
+  const W = opts.width ?? 1280;
+  const H = opts.height ?? 720;
+  const L = 0.3 * Math.min(W, H); // full arm length
+  const span = (opts.spanRatio ?? 0.67) * L; // shoulder width
+  const cx = W / 2;
+  const rng = opts.rng ?? Math.random;
+  const noise = () => (opts.noisePx ? (rng() * 2 - 1) * opts.noisePx : 0);
+  const out: PoseLandmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.3, visibility: 0.1 }));
+  const set = (i: number, p: { x: number; y: number }, visibility: number) => {
+    out[i] = { x: (p.x + noise()) / W, y: (p.y + noise()) / H, visibility };
+  };
+
+  const shoulderY = opts.standing ? H * 0.3 : H * 0.8 - opts.shoulderHeight * L;
+  // Facing the camera, the person's right side appears on the image's left.
+  for (const side of ['left', 'right'] as const) {
+    const dir = side === 'left' ? 1 : -1;
+    const idx = SIDE_INDICES[side];
+    const shoulder = { x: cx + (dir * span) / 2, y: shoulderY };
+    const wrist = opts.standing
+      ? { x: cx + dir * 0.6 * span, y: shoulderY + L * 0.98 }
+      : { x: cx + dir * 0.6 * span, y: H * 0.8 };
+    // Elbow: equal-length upper arm and forearm, bending outward.
+    const dx = wrist.x - shoulder.x;
+    const dy = wrist.y - shoulder.y;
+    const d = Math.hypot(dx, dy);
+    const bend = Math.sqrt(Math.max((L / 2) ** 2 - (d / 2) ** 2, 0));
+    let px = -dy / d;
+    let py = dx / d;
+    if (px * dir < 0) {
+      px = -px;
+      py = -py;
+    }
+    const elbow = { x: (shoulder.x + wrist.x) / 2 + px * bend, y: (shoulder.y + wrist.y) / 2 + py * bend };
+    const armHidden = opts.hideArm === side;
+
+    set(idx.shoulder, shoulder, 0.97);
+    set(idx.elbow, elbow, armHidden ? 0 : 0.92);
+    set(idx.wrist, wrist, armHidden ? 0 : 0.9);
+    if (opts.standing) {
+      set(idx.hip, { x: cx + dir * 0.35 * span, y: shoulderY + 1.3 * span }, 0.9);
+      set(idx.knee, { x: cx + dir * 0.35 * span, y: shoulderY + 2.3 * span }, 0.9);
+      set(idx.ankle, { x: cx + dir * 0.35 * span, y: shoulderY + 3.2 * span }, 0.9);
+    } else {
+      // Hips/legs extend away from the camera, appearing just behind the shoulders.
+      set(idx.hip, { x: cx + dir * 0.35 * span, y: shoulderY + (opts.hipDrop ?? -0.05) * span }, opts.hipVisibility ?? 0.6);
+      set(idx.knee, { x: cx + dir * 0.3 * span, y: shoulderY - 0.1 * span }, 0.2);
+      set(idx.ankle, { x: cx + dir * 0.25 * span, y: shoulderY - 0.12 * span }, 0.15);
+    }
+  }
+  set(0, { x: cx, y: shoulderY - (opts.standing ? 0.7 : (opts.noseRise ?? 0.15)) * span }, 0.98);
+  return out;
+}
+
 /** Deterministic PRNG so noisy tests are reproducible. */
 export function seededRng(seed: number): () => number {
   let s = seed >>> 0;

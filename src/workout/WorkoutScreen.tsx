@@ -6,6 +6,7 @@ import { actualFacing, CameraError, countCameras, openCamera, stopStream, type F
 import { loadPoseLandmarker } from '../lib/poseLandmarker';
 import { loadPrefs, savePrefs } from '../lib/storage';
 import { formatClock } from '../lib/format';
+import { sounds } from '../lib/sounds';
 import { computeFit, drawPose } from './overlay';
 import { CUE_COPY } from './cues';
 
@@ -31,7 +32,13 @@ interface ErrorInfo {
 const ACCENT = '#C8FF2E';
 /** Pose inference is capped at this rate; the video itself still renders at full rate. */
 const MAX_INFERENCE_FPS = 30;
-const DEBUG_AVAILABLE = import.meta.env.DEV;
+/**
+ * The debug overlay is never shown by default. Dev builds get a DBG button;
+ * any build (including the deployed site) shows it when opened with `?debug`,
+ * so tracking can be tuned on a real phone.
+ */
+const DEBUG_PARAM = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
+const DEBUG_AVAILABLE = import.meta.env.DEV || DEBUG_PARAM;
 
 export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
   const [stage, setStage] = useState<Stage>('camera');
@@ -44,9 +51,7 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
   const [switching, setSwitching] = useState(false);
   /** Model download progress in whole percent, null if unknown. */
   const [modelProgress, setModelProgress] = useState<number | null>(null);
-  const [debug, setDebug] = useState(
-    () => DEBUG_AVAILABLE && new URLSearchParams(location.search).has('debug'),
-  );
+  const [debug, setDebug] = useState(DEBUG_PARAM);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,6 +72,9 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
   const mountedRef = useRef(true);
   const debugOnRef = useRef(debug);
   debugOnRef.current = debug;
+  const [soundOn, setSoundOn] = useState(() => loadPrefs().sound);
+  const soundOnRef = useRef(soundOn);
+  soundOnRef.current = soundOn;
 
   /** Puts a stream into the <video>, works out mirroring and whether switching is possible. */
   const attachStream = useCallback(async (stream: MediaStream) => {
@@ -152,6 +160,7 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
         flash: Math.max(0, (flashUntil - now) / 350),
         depth: out.depth,
         minVisibility: detector.config.minVisibility,
+        view: out.view,
       });
 
       // Depth readout
@@ -183,7 +192,8 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
           `fps        ${fps.toFixed(0)}`,
           `status     ${out.status} / ${out.tracking}${out.issue !== 'none' ? ` (${out.issue})` : ''}`,
           `phase      ${out.phase}`,
-          `side       ${out.side}`,
+          `view       ${out.view} (${f(out.viewScore, 2)})`,
+          `side       ${out.view === 'front' ? 'both' : out.side}`,
           `confidence ${out.confidence.toFixed(2)}`,
           `elbow      ${f(out.elbowAngle)}°`,
           `alignment  ${f(out.alignmentDeviation)}° off`,
@@ -230,6 +240,8 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
         startTimeRef.current = now;
         setActive(true);
       }
+      // Fires once per rep, the first time it reaches full depth.
+      if (out.fullDepthReached && soundOnRef.current) sounds.fullDepth();
       if (out.repCounted) {
         flashUntil = now + 350;
         setReps(out.reps);
@@ -337,8 +349,16 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
     }
   };
 
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    savePrefs({ sound: next });
+    if (next) sounds.unlock();
+  };
+
   const endSet = () => {
     const det = detectorRef.current!;
+    if (det.repCount > 0 && soundOnRef.current) sounds.setComplete();
     const start = startTimeRef.current;
     onFinish({
       reps: det.repCount,
@@ -351,7 +371,11 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
   const minRepDepth = detectorRef.current.config.minRepDepth;
 
   return (
-    <div className={`workout ${active ? 'is-active' : 'is-positioning'}`}>
+    <div
+      className={`workout ${active ? 'is-active' : 'is-positioning'}`}
+      // Any tap re-enables audio if the browser paused it (e.g. after the camera prompt).
+      onPointerDown={() => soundOnRef.current && sounds.unlock()}
+    >
       <div className={`camera ${mirrored ? 'is-mirrored' : ''}`}>
         <video ref={videoRef} playsInline muted autoPlay />
         <canvas ref={canvasRef} />
@@ -371,6 +395,14 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
               DBG
             </button>
           )}
+          <button
+            className={`icon-btn ${soundOn ? '' : 'is-muted'}`}
+            onClick={toggleSound}
+            aria-label={soundOn ? 'Mute sounds' : 'Unmute sounds'}
+            aria-pressed={!soundOn}
+          >
+            <SoundIcon on={soundOn} />
+          </button>
           {canSwitch && (
             <button className="icon-btn" onClick={switchCamera} disabled={switching} aria-label="Switch camera">
               <FlipIcon />
@@ -498,6 +530,19 @@ function describeError(err: unknown): ErrorInfo {
     }
   }
   return { title: 'Something went wrong', body: err instanceof Error ? err.message : String(err) };
+}
+
+function SoundIcon({ on }: { on: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" />
+      {on ? (
+        <path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      ) : (
+        <path d="M16 9.5l5 5M21 9.5l-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      )}
+    </svg>
+  );
 }
 
 function FlipIcon() {

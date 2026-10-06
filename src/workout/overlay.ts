@@ -1,4 +1,5 @@
-import { SIDE_INDICES, SIDE_SEGMENTS, type PoseLandmark, type Side } from '../pushup/landmarks';
+import { LM, SIDE_INDICES, SIDE_SEGMENTS, type PoseLandmark, type Side } from '../pushup/landmarks';
+import type { View } from '../pushup/detector';
 
 /**
  * How the video is fitted into its container. The canvas overlay uses the same
@@ -31,15 +32,18 @@ export interface OverlayStyle {
   accent: string;
   /** 0..1, brief accent flash after a rep is counted. */
   flash: number;
-  /** Current depth 0..100 or null. Drawn as a small arc at the tracked elbow. */
+  /** Current depth 0..100 or null. Drawn as a small arc at the tracked elbow(s). */
   depth: number | null;
+  /** Side-on: one tracked side is bright. Facing the camera: both sides are tracked. */
+  view: View;
   minVisibility: number;
 }
 
 /**
- * Draws a subtle skeleton. The tracked side is brighter; the far side is
- * faint. Joints below the visibility threshold aren't drawn at all, so the
- * overlay never shows a "guessed" limb.
+ * Draws a subtle skeleton. Side-on, the tracked side is brighter and the far
+ * side faint; facing the camera both sides are tracked, joined across the
+ * shoulders and hips. Joints below the visibility threshold aren't drawn at
+ * all, so the overlay never shows a "guessed" limb.
  */
 export function drawPose(
   ctx: CanvasRenderingContext2D,
@@ -65,15 +69,32 @@ export function drawPose(
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
+  const front = style.view === 'front' && trackedSide !== null;
+  const trackedStroke = style.flash > 0 ? mixAccent(style.accent, style.flash) : 'rgba(255,255,255,0.72)';
+
+  if (front) {
+    // Shoulder and hip lines tie the two sides together.
+    ctx.strokeStyle = trackedStroke;
+    ctx.lineWidth = 3 * dpr;
+    ctx.beginPath();
+    for (const [a, b] of [
+      [LM.leftShoulder, LM.rightShoulder],
+      [LM.leftHip, LM.rightHip],
+    ]) {
+      if (!ok(landmarks[a]) || !ok(landmarks[b])) continue;
+      const pa = map(landmarks[a]);
+      const pb = map(landmarks[b]);
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+    }
+    ctx.stroke();
+  }
+
   const sides: Side[] = trackedSide === 'right' ? ['left', 'right'] : ['right', 'left'];
   for (const side of sides) {
-    const tracked = side === trackedSide;
+    const tracked = front || side === trackedSide;
     const idx = SIDE_INDICES[side];
-    ctx.strokeStyle = tracked
-      ? style.flash > 0
-        ? mixAccent(style.accent, style.flash)
-        : 'rgba(255,255,255,0.72)'
-      : 'rgba(255,255,255,0.22)';
+    ctx.strokeStyle = tracked ? trackedStroke : 'rgba(255,255,255,0.22)';
     ctx.lineWidth = (tracked ? 3 : 2) * dpr;
     ctx.beginPath();
     for (const [a, b] of SIDE_SEGMENTS) {

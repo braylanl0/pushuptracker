@@ -18,6 +18,8 @@ export interface WorkoutRecord {
 
 export interface Preferences {
   facingMode: 'user' | 'environment';
+  /** Sound effects on/off. */
+  sound: boolean;
 }
 
 const HISTORY_KEY = 'pushup.history.v1';
@@ -92,11 +94,15 @@ export function personalBest(history: WorkoutRecord[]): WorkoutRecord | null {
 
 export function loadPrefs(store = defaultStore()): Preferences {
   const p = readJson<Partial<Preferences>>(store, PREFS_KEY);
-  return { facingMode: p?.facingMode === 'environment' ? 'environment' : 'user' };
+  return {
+    facingMode: p?.facingMode === 'environment' ? 'environment' : 'user',
+    sound: p?.sound !== false,
+  };
 }
 
-export function savePrefs(prefs: Preferences, store = defaultStore()): void {
-  writeJson(store, PREFS_KEY, prefs);
+/** Merges into the saved preferences. */
+export function savePrefs(prefs: Partial<Preferences>, store = defaultStore()): void {
+  writeJson(store, PREFS_KEY, { ...loadPrefs(store), ...prefs });
 }
 
 export function summarizeDepths(repDepths: number[]): { avgDepth: number | null; bestDepth: number | null } {
