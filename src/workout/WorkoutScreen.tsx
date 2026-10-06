@@ -42,6 +42,8 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
   const [mirrored, setMirrored] = useState(true);
   const [canSwitch, setCanSwitch] = useState(false);
   const [switching, setSwitching] = useState(false);
+  /** Model download progress in whole percent, null if unknown. */
+  const [modelProgress, setModelProgress] = useState<number | null>(null);
   const [debug, setDebug] = useState(
     () => DEBUG_AVAILABLE && new URLSearchParams(location.search).has('debug'),
   );
@@ -100,7 +102,14 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
     setStage('camera');
 
     // Load the model while the camera permission prompt is up; it's cached after the first time.
-    const modelPromise = loadPoseLandmarker();
+    let lastPct: number | null = -1;
+    const modelPromise = loadPoseLandmarker((fraction) => {
+      const pct = fraction === null ? null : Math.floor(fraction * 100);
+      if (pct !== lastPct && !cancelled) {
+        lastPct = pct;
+        setModelProgress(pct);
+      }
+    });
     modelPromise.catch(() => {});
 
     // Frame-loop state lives in plain variables, not React state: nothing here
@@ -429,7 +438,7 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
       {loading && (
         <div className="wo-overlay">
           <div className="loader" />
-          <p>{stage === 'camera' ? 'Starting camera' : 'Loading pose tracking'}</p>
+          <p>{loadingLabel(stage, modelProgress)}</p>
         </div>
       )}
 
@@ -452,6 +461,12 @@ export function WorkoutScreen({ bestReps, onFinish, onCancel }: Props) {
 }
 
 class ModelLoadError extends Error {}
+
+function loadingLabel(stage: Stage, progress: number | null): string {
+  if (stage === 'camera') return 'Starting camera';
+  if (progress === null) return 'Loading pose tracking';
+  return progress < 100 ? `Loading pose tracking · ${progress}%` : 'Preparing pose tracking';
+}
 
 function describeError(err: unknown): ErrorInfo {
   if (err instanceof ModelLoadError) {

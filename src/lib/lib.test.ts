@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { MEDIAPIPE_VERSION } from './mediapipeVersion';
+// Relative path: the package's `exports` map doesn't expose package.json.
+import mediapipePkg from '../../node_modules/@mediapipe/tasks-vision/package.json';
 import { dayLabel, formatClock, formatDuration } from './format';
 import {
   loadHistory,
@@ -80,5 +83,11 @@ describe('format', () => {
     const now = new Date(2026, 9, 6, 15, 0);
     expect(dayLabel(new Date(2026, 9, 6, 8, 0).toISOString(), now)).toBe('Today');
     expect(dayLabel(new Date(2026, 9, 5, 23, 0).toISOString(), now)).toBe('Yesterday');
+  });
+});
+
+describe('mediapipe', () => {
+  it('CDN version pin matches the installed package', () => {
+    expect(MEDIAPIPE_VERSION).toBe(mediapipePkg.version);
   });
 });

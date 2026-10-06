@@ -7,7 +7,7 @@ video is uploaded, recorded or stored.
 ## Run it
 
 ```bash
-npm install        # also copies the MediaPipe WASM + downloads the pose model into public/mediapipe
+npm install        # also copies the MediaPipe WASM + downloads the pose model into public/mediapipe (offline fallback)
 npm run dev        # http://localhost:5173 (desktop, camera works on localhost)
 ```
 
@@ -65,6 +65,13 @@ documented. The most useful:
 **Debug overlay** (dev builds only): tap `DBG` in the workout screen, or open
 `/?debug`. It shows FPS, state, tracked side, confidence, elbow angle, body
 alignment, raw/smoothed depth and per-rep depths.
+
+Pose assets (~22 MB: WASM runtime + model) load from jsDelivr/Google's CDN
+first, with a progress readout, and fall back to the self-hosted copy in
+`public/mediapipe` if the CDN fails or stalls. Some static hosts (Vercel in
+testing) serve these large files far slower than the CDNs. The WASM version is
+pinned in `src/lib/mediapipeVersion.ts`; a test fails if it drifts from the
+installed package.
 
 The model defaults to `full` for steadier elbows and wrists; switch `POSE_MODEL`
 in `src/lib/poseLandmarker.ts` to `'lite'` for more FPS on older phones.
